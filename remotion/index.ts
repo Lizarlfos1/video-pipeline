@@ -1,4 +1,4 @@
 import { registerRoot } from "remotion";
-import { SubtitlesComposition } from "./Subtitles.js";
+import { SubtitlesComposition } from "./Subtitles";
 
 registerRoot(SubtitlesComposition);
