@@ -66,25 +66,27 @@ function buildFilterComplex(edit: ShortEdit): {
   // Calculate the cumulative time offset for each segment to map original timestamps
   // to concatenated timeline positions
   let zoomInput = "[vconcat]";
-  edit.emphasisWords.forEach((ew, i) => {
+  let zoomCount = 0;
+  edit.emphasisWords.forEach((ew) => {
     const concatTime = mapToConcatTime(ew.timestamp, edit.segmentsToKeep);
     if (concatTime === null) return;
 
     const zoomStart = concatTime;
     const zoomEnd = concatTime + (ew.duration || 0.5);
-    const outLabel = `[vzoom${i}]`;
+    const outLabel = `[vzoom${zoomCount}]`;
 
     // Smooth zoom in/out: scale up to 1.3x centered
     filters.push(
       `${zoomInput}zoompan=z='if(between(time,${zoomStart},${zoomEnd}),min(1.3,1+0.6*(time-${zoomStart})/${ew.duration || 0.5}),1)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30${outLabel}`
     );
     zoomInput = outLabel;
+    zoomCount++;
   });
 
   // If no zoom was applied, just pass through
   const finalVideo =
-    edit.emphasisWords.length > 0
-      ? `vzoom${edit.emphasisWords.length - 1}`
+    zoomCount > 0
+      ? `vzoom${zoomCount - 1}`
       : "vconcat";
 
   return {
