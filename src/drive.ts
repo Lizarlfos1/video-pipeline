@@ -91,12 +91,19 @@ export async function pullAssets(
 
   const index: AssetIndex = { broll: [], graphs: [], sfx: [] };
 
+  // Skip Google-native files (Docs, Sheets, etc.) that can't be downloaded as binary
+  const isDownloadable = (mimeType: string) =>
+    !mimeType.startsWith("application/vnd.google-apps.");
+
   // B-roll
   const brollFiles = await listFolder(bRollFolderId);
   for (const f of brollFiles) {
+    if (!isDownloadable(f.mimeType)) {
+      console.log(`  [drive] Skipping non-binary file: ${f.name} (${f.mimeType})`);
+      continue;
+    }
     const localPath = path.join(brollDir, f.name);
     await downloadFile(f.id, localPath);
-    // Label is the filename without extension
     const label = path.parse(f.name).name;
     index.broll.push({ label, path: localPath });
     console.log(`  [drive] B-roll: ${label}`);
@@ -105,6 +112,10 @@ export async function pullAssets(
   // Graphs
   const graphFiles = await listFolder(graphsFolderId);
   for (const f of graphFiles) {
+    if (!isDownloadable(f.mimeType)) {
+      console.log(`  [drive] Skipping non-binary file: ${f.name} (${f.mimeType})`);
+      continue;
+    }
     const localPath = path.join(graphsDir, f.name);
     await downloadFile(f.id, localPath);
     const label = path.parse(f.name).name;
@@ -115,6 +126,10 @@ export async function pullAssets(
   // SFX
   const sfxFiles = await listFolder(sfxFolderId);
   for (const f of sfxFiles) {
+    if (!isDownloadable(f.mimeType)) {
+      console.log(`  [drive] Skipping non-binary file: ${f.name} (${f.mimeType})`);
+      continue;
+    }
     const localPath = path.join(sfxDir, f.name);
     await downloadFile(f.id, localPath);
     const label = path.parse(f.name).name;
