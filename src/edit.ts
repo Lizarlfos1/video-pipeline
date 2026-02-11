@@ -5,11 +5,45 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile } from "node:fs/promises";
+import { writeFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ShortEdit, AssetIndex } from "./types.js";
 
-const exec = promisify(execFile);
+const execAsync = promisify(execFile);
+
+/** Run ffmpeg with stderr logging on failure */
+async function ffmpeg(
+  args: string[],
+  opts?: { maxBuffer?: number; timeout?: number }
+): Promise<void> {
+  try {
+    await execAsync("ffmpeg", args, {
+      maxBuffer: opts?.maxBuffer ?? 50 * 1024 * 1024,
+      timeout: opts?.timeout ?? 30 * 60 * 1000,
+    });
+  } catch (err: any) {
+    // Log stderr for debugging
+    if (err.stderr) {
+      console.error("[edit] FFmpeg stderr:", err.stderr.slice(-2000));
+    }
+    throw err;
+  }
+}
+
+/** Check that an output file exists and has content */
+async function validateOutput(filePath: string, label: string): Promise<void> {
+  try {
+    const s = await stat(filePath);
+    if (s.size < 1000) {
+      throw new Error(`${label}: output file is too small (${s.size} bytes), likely empty`);
+    }
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      throw new Error(`${label}: output file was not created`);
+    }
+    throw err;
+  }
+}
 
 /**
  * Resolve asset labels to actual file paths
@@ -37,7 +71,7 @@ function resolveAssets(edit: ShortEdit, assets: AssetIndex): ShortEdit {
 
 /**
  * Build an FFmpeg filter_complex for a single short
- * Handles: segment concatenation, zoom effects, b-roll/graph overlays
+ * Handles: segment concatenation + zoom via crop/scale overlay
  */
 function buildFilterComplex(edit: ShortEdit): {
   filterComplex: string;
@@ -62,32 +96,48 @@ function buildFilterComplex(edit: ShortEdit): {
     `${concatInputs}concat=n=${segments.length}:v=1:a=1[vconcat][aconcat]`
   );
 
-  // Step 3: Apply zoom on emphasis words
-  // Calculate the cumulative time offset for each segment to map original timestamps
-  // to concatenated timeline positions
-  let zoomInput = "[vconcat]";
-  let zoomCount = 0;
-  edit.emphasisWords.forEach((ew) => {
-    const concatTime = mapToConcatTime(ew.timestamp, edit.segmentsToKeep);
-    if (concatTime === null) return;
+  // Step 3: Scale to target size
+  filters.push(`[vconcat]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2[vscaled]`);
 
-    const zoomStart = concatTime;
-    const zoomEnd = concatTime + (ew.duration || 0.5);
-    const outLabel = `[vzoom${zoomCount}]`;
+  // Step 4: Apply zoom on emphasis words using crop+overlay (not zoompan)
+  // Build zoom enable condition for all emphasis words
+  const zoomWindows = edit.emphasisWords
+    .map((ew) => {
+      const concatTime = mapToConcatTime(ew.timestamp, edit.segmentsToKeep);
+      if (concatTime === null) return null;
+      const start = concatTime;
+      const end = concatTime + (ew.duration || 0.5);
+      return { start, end };
+    })
+    .filter((w): w is { start: number; end: number } => w !== null);
 
-    // Smooth zoom in/out: scale up to 1.3x centered
+  let finalVideo = "vscaled";
+
+  if (zoomWindows.length > 0) {
+    // Create a zoomed version: crop center 1/1.3 of the frame, scale back up
+    const zoomFactor = 1.3;
+    const cropW = Math.round(1080 / zoomFactor);
+    const cropH = Math.round(1920 / zoomFactor);
+    const cropX = Math.round((1080 - cropW) / 2);
+    const cropY = Math.round((1920 - cropH) / 2);
+
     filters.push(
-      `${zoomInput}zoompan=z='if(between(time,${zoomStart},${zoomEnd}),min(1.3,1+0.6*(time-${zoomStart})/${ew.duration || 0.5}),1)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30${outLabel}`
+      `[vscaled]split=2[vbase][vforzoom]`
     );
-    zoomInput = outLabel;
-    zoomCount++;
-  });
+    filters.push(
+      `[vforzoom]crop=${cropW}:${cropH}:${cropX}:${cropY},scale=1080:1920[vzoomed]`
+    );
 
-  // If no zoom was applied, just pass through
-  const finalVideo =
-    zoomCount > 0
-      ? `vzoom${zoomCount - 1}`
-      : "vconcat";
+    // Overlay zoomed version only during emphasis windows
+    const enableExpr = zoomWindows
+      .map((w) => `between(t\\,${w.start.toFixed(3)}\\,${w.end.toFixed(3)})`)
+      .join("+");
+
+    filters.push(
+      `[vbase][vzoomed]overlay=0:0:enable='${enableExpr}'[vfinal]`
+    );
+    finalVideo = "vfinal";
+  }
 
   return {
     filterComplex: filters.join(";\n"),
@@ -134,26 +184,24 @@ export async function renderShort(
   const baseCutPath = path.join(tmpDir, `base_${edit.id}.mp4`);
   const { filterComplex, outputMap } = buildFilterComplex(resolved);
 
-  // Write filter to file (can be very long)
+  // Write filter to file for debugging
   const filterPath = path.join(tmpDir, `filter_${edit.id}.txt`);
   await writeFile(filterPath, filterComplex);
+  console.log(`[edit] Filter written to ${filterPath}`);
 
   // Step 1: Base cut with zoom
-  await exec(
-    "ffmpeg",
-    [
-      "-i", aRollPath,
-      "-filter_complex_script", filterPath,
-      ...outputMap,
-      "-c:v", "h264_videotoolbox", // Apple Silicon HW encoding
-      "-b:v", "8M",
-      "-c:a", "aac",
-      "-b:a", "192k",
-      "-y",
-      baseCutPath,
-    ],
-    { maxBuffer: 50 * 1024 * 1024, timeout: 30 * 60 * 1000 }
-  );
+  await ffmpeg([
+    "-i", aRollPath,
+    "-filter_complex_script", filterPath,
+    ...outputMap,
+    "-c:v", "h264_videotoolbox",
+    "-b:v", "8M",
+    "-c:a", "aac",
+    "-b:a", "192k",
+    "-y",
+    baseCutPath,
+  ]);
+  await validateOutput(baseCutPath, `Short #${edit.id} base cut`);
 
   // Step 2: Overlay b-roll and graphs
   let currentPath = baseCutPath;
@@ -173,25 +221,19 @@ export async function renderShort(
 
     const overlayFilter =
       overlay.type === "graph"
-        ? // Graph: scale to fit, center, with fade in/out
-          `[1:v]scale=800:-1,format=rgba,fade=in:st=0:d=0.3:alpha=1,fade=out:st=${overlay.duration - 0.3}:d=0.3:alpha=1[ovr];[0:v][ovr]overlay=(W-w)/2:(H-h)/2:enable='between(t,${overlayStart},${overlayStart + overlay.duration})'`
-        : // B-roll: full screen overlay with crossfade
-          `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=PTS-STARTPTS[ovr];[0:v][ovr]overlay=0:0:enable='between(t,${overlayStart},${overlayStart + overlay.duration})'`;
+        ? `[1:v]scale=800:-1,format=rgba,fade=in:st=0:d=0.3:alpha=1,fade=out:st=${overlay.duration - 0.3}:d=0.3:alpha=1[ovr];[0:v][ovr]overlay=(W-w)/2:(H-h)/2:enable='between(t,${overlayStart},${overlayStart + overlay.duration})'`
+        : `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=PTS-STARTPTS[ovr];[0:v][ovr]overlay=0:0:enable='between(t,${overlayStart},${overlayStart + overlay.duration})'`;
 
-    await exec(
-      "ffmpeg",
-      [
-        "-i", currentPath,
-        "-i", overlay.filePath,
-        "-filter_complex", overlayFilter,
-        "-c:v", "h264_videotoolbox",
-        "-b:v", "8M",
-        "-c:a", "copy",
-        "-y",
-        overlayOutput,
-      ],
-      { maxBuffer: 50 * 1024 * 1024, timeout: 10 * 60 * 1000 }
-    );
+    await ffmpeg([
+      "-i", currentPath,
+      "-i", overlay.filePath,
+      "-filter_complex", overlayFilter,
+      "-c:v", "h264_videotoolbox",
+      "-b:v", "8M",
+      "-c:a", "copy",
+      "-y",
+      overlayOutput,
+    ], { timeout: 10 * 60 * 1000 });
 
     currentPath = overlayOutput;
   }
@@ -206,27 +248,23 @@ export async function renderShort(
 
     const sfxOutput = path.join(tmpDir, `sfx_${edit.id}_${i}.mp4`);
 
-    await exec(
-      "ffmpeg",
-      [
-        "-i", currentPath,
-        "-i", sfx.filePath,
-        "-filter_complex",
-        `[1:a]adelay=${Math.round(sfxTime * 1000)}|${Math.round(sfxTime * 1000)},volume=0.5[sfx];[0:a][sfx]amix=inputs=2:duration=first`,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-y",
-        sfxOutput,
-      ],
-      { maxBuffer: 50 * 1024 * 1024, timeout: 10 * 60 * 1000 }
-    );
+    await ffmpeg([
+      "-i", currentPath,
+      "-i", sfx.filePath,
+      "-filter_complex",
+      `[1:a]adelay=${Math.round(sfxTime * 1000)}|${Math.round(sfxTime * 1000)},volume=0.5[sfx];[0:a][sfx]amix=inputs=2:duration=first`,
+      "-c:v", "copy",
+      "-c:a", "aac",
+      "-y",
+      sfxOutput,
+    ], { timeout: 10 * 60 * 1000 });
 
     currentPath = sfxOutput;
   }
 
   // Final: copy to output (no subtitles yet - Remotion handles that)
   if (currentPath !== outputPath) {
-    await exec("ffmpeg", ["-i", currentPath, "-c", "copy", "-y", outputPath]);
+    await ffmpeg(["-i", currentPath, "-c", "copy", "-y", outputPath]);
   }
 
   console.log(`[edit] Done: ${outputPath}`);

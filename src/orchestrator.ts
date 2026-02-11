@@ -59,53 +59,67 @@ export async function runPipeline(opts: PipelineOptions): Promise<void> {
 
     // Step 4 + 5: Render each short (sequential to avoid overloading the M2)
     const completedPaths: string[] = [];
+    const failed: { id: number; title: string; error: string }[] = [];
 
     for (const edit of edits) {
-      await notify(`🎬 Rendering short #${edit.id}: "${edit.title}"...`);
+      try {
+        await notify(`🎬 Rendering short #${edit.id}: "${edit.title}"...`);
 
-      // 4a: FFmpeg edit (cut, zoom, overlays, sfx)
-      const editedPath = await renderShort(
-        aRollPath,
-        edit,
-        assets,
-        outputDir,
-        tmpDir
-      );
+        // 4a: FFmpeg edit (cut, zoom, overlays, sfx)
+        const editedPath = await renderShort(
+          aRollPath,
+          edit,
+          assets,
+          outputDir,
+          tmpDir
+        );
 
-      // 4b: Calculate duration of the concatenated short
-      const totalDuration = edit.segmentsToKeep.reduce(
-        (sum, seg) => sum + (seg.end - seg.start),
-        0
-      );
+        // 4b: Calculate duration of the concatenated short
+        const totalDuration = edit.segmentsToKeep.reduce(
+          (sum, seg) => sum + (seg.end - seg.start),
+          0
+        );
 
-      // 5: Add Remotion subtitles
-      const finalPath = path.join(
-        outputDir,
-        `final_${edit.id}_${edit.title.replace(/[^a-zA-Z0-9]/g, "_")}.mp4`
-      );
-      await addSubtitles(
-        editedPath,
-        edit.subtitleWords,
-        totalDuration,
-        finalPath,
-        tmpDir
-      );
+        // 5: Add Remotion subtitles
+        const finalPath = path.join(
+          outputDir,
+          `final_${edit.id}_${edit.title.replace(/[^a-zA-Z0-9]/g, "_")}.mp4`
+        );
+        await addSubtitles(
+          editedPath,
+          edit.subtitleWords,
+          totalDuration,
+          finalPath,
+          tmpDir
+        );
 
-      completedPaths.push(finalPath);
-      await notify(`✅ Short #${edit.id} rendered`);
+        completedPaths.push(finalPath);
+        await notify(`✅ Short #${edit.id} rendered`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[orchestrator] Short #${edit.id} failed:`, msg);
+        await notify(`⚠️ Short #${edit.id} "${edit.title}" failed, skipping: ${msg.slice(0, 200)}`);
+        failed.push({ id: edit.id, title: edit.title, error: msg.slice(0, 200) });
+      }
     }
 
     // Step 6: Upload to Drive
-    await notify("📤 Uploading completed shorts to Drive...");
+    if (completedPaths.length === 0) {
+      await notify(`❌ All ${edits.length} shorts failed to render. Check logs for details.`);
+      return;
+    }
+    await notify(`📤 Uploading ${completedPaths.length} completed shorts to Drive...`);
     const links: string[] = [];
     for (const p of completedPaths) {
       const link = await uploadCompleted(p, opts.completedFolderId);
       links.push(link);
     }
 
-    await notify(
-      `🎉 All done! ${completedPaths.length} shorts uploaded:\n${links.map((l, i) => `${i + 1}. ${l}`).join("\n")}`
-    );
+    let summary = `🎉 Done! ${completedPaths.length} shorts uploaded:\n${links.map((l, i) => `${i + 1}. ${l}`).join("\n")}`;
+    if (failed.length > 0) {
+      summary += `\n\n⚠️ ${failed.length} short(s) failed:\n${failed.map((f) => `#${f.id} "${f.title}": ${f.error}`).join("\n")}`;
+    }
+    await notify(summary);
 
     // Cleanup tmp files
     await rm(tmpDir, { recursive: true, force: true });
