@@ -3,7 +3,7 @@
  */
 
 import { google } from "googleapis";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AssetIndex } from "./types.js";
 
@@ -95,6 +95,16 @@ export async function pullAssets(
   const isDownloadable = (mimeType: string) =>
     !mimeType.startsWith("application/vnd.google-apps.");
 
+  async function downloadIfNew(fileId: string, destPath: string, label: string) {
+    try {
+      await stat(destPath);
+      console.log(`  [drive] Cached: ${label}`);
+    } catch {
+      await downloadFile(fileId, destPath);
+      console.log(`  [drive] Downloaded: ${label}`);
+    }
+  }
+
   // B-roll
   const brollFiles = await listFolder(bRollFolderId);
   for (const f of brollFiles) {
@@ -103,10 +113,9 @@ export async function pullAssets(
       continue;
     }
     const localPath = path.join(brollDir, f.name);
-    await downloadFile(f.id, localPath);
     const label = path.parse(f.name).name;
+    await downloadIfNew(f.id, localPath, `B-roll: ${label}`);
     index.broll.push({ label, path: localPath });
-    console.log(`  [drive] B-roll: ${label}`);
   }
 
   // Graphs
@@ -117,10 +126,9 @@ export async function pullAssets(
       continue;
     }
     const localPath = path.join(graphsDir, f.name);
-    await downloadFile(f.id, localPath);
     const label = path.parse(f.name).name;
+    await downloadIfNew(f.id, localPath, `Graph: ${label}`);
     index.graphs.push({ label, path: localPath });
-    console.log(`  [drive] Graph: ${label}`);
   }
 
   // SFX
@@ -131,10 +139,9 @@ export async function pullAssets(
       continue;
     }
     const localPath = path.join(sfxDir, f.name);
-    await downloadFile(f.id, localPath);
     const label = path.parse(f.name).name;
+    await downloadIfNew(f.id, localPath, `SFX: ${label}`);
     index.sfx.push({ label, path: localPath });
-    console.log(`  [drive] SFX: ${label}`);
   }
 
   console.log(

@@ -31,16 +31,18 @@ export async function runPipeline(opts: PipelineOptions): Promise<void> {
   const runId = Date.now().toString(36);
   const tmpDir = path.join(process.cwd(), "tmp", runId);
   const outputDir = path.join(process.cwd(), "output", runId);
+  const assetsDir = path.join(process.cwd(), "assets");
 
   await mkdir(tmpDir, { recursive: true });
   await mkdir(outputDir, { recursive: true });
+  await mkdir(assetsDir, { recursive: true });
 
   try {
-    // Step 1: Pull from Drive
-    await notify("📥 Downloading a-roll and assets from Drive...");
+    // Step 1: Pull from Drive (assets cached in persistent dir, a-roll always fresh)
+    await notify("📥 Downloading a-roll and syncing assets from Drive...");
     const [aRollPath, assets] = await Promise.all([
       pullARoll(opts.aRollFileId, tmpDir),
-      pullAssets(opts.bRollFolderId, opts.graphsFolderId, opts.sfxFolderId, tmpDir),
+      pullAssets(opts.bRollFolderId, opts.graphsFolderId, opts.sfxFolderId, assetsDir),
     ]);
 
     // Step 2: Transcribe
