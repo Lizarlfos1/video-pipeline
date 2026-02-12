@@ -6,6 +6,7 @@
   "/api/runs/[runId]/edits/route": "app/api/runs/[runId]/edits/route.js",
   "/api/runs/[runId]/transcript/route": "app/api/runs/[runId]/transcript/route.js",
   "/api/runs/route": "app/api/runs/route.js",
+  "/api/upload/route": "app/api/upload/route.js",
   "/editor/page": "app/editor/page.js",
   "/page": "app/page.js"
 }

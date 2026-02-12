@@ -45,6 +45,26 @@ export async function saveEdits(
   });
 }
 
+// Upload
+export async function uploadVideo(
+  video: File,
+  script: string,
+): Promise<{ runId: string }> {
+  const formData = new FormData();
+  formData.append("video", video);
+  formData.append("script", script);
+
+  const res = await fetch(`${BASE}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Upload failed: ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
 // Media URL builder
 export function mediaUrl(relativePath: string): string {
   return `${BASE}/media?path=${encodeURIComponent(relativePath)}`;

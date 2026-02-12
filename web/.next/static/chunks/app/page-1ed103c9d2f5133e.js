@@ -1,1 +1,0 @@
-(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[974],{1662:(e,u,r)=>{Promise.resolve().then(r.bind(r,5997))},5997:(e,u,r)=>{"use strict";r.r(u),r.d(u,{default:()=>l});var s=r(2115),t=r(7260);function l(){let e=(0,t.useRouter)();return(0,s.useEffect)(()=>{e.replace("/editor")},[e]),null}}},e=>{e.O(0,[441,255,358],()=>e(e.s=1662)),_N_E=e.O()}]);

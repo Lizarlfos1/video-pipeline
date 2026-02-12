@@ -132,6 +132,7 @@ async function GET() {
                 hasTranscript: await exists("transcript.json"),
                 hasEdits: await exists("edits.json"),
                 hasAssets: await exists("assets.json"),
+                hasScript: await exists("script.txt"),
                 shortsCount: await countFiles("shorts"),
                 finalsCount: await countFiles("finals")
             };

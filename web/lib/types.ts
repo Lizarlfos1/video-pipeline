@@ -71,11 +71,12 @@ export interface RunInfo {
   hasTranscript: boolean;
   hasEdits: boolean;
   hasAssets: boolean;
+  hasScript: boolean;
   shortsCount: number;
   finalsCount: number;
 }
 
-export type PipelineStage = "pull" | "transcribe" | "analyze" | "edit" | "subtitles";
+export type PipelineStage = "pull" | "transcribe" | "analyze" | "align" | "edit" | "subtitles";
 
 export type StageStatus = "idle" | "running" | "success" | "error";
 

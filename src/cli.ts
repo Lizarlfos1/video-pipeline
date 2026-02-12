@@ -23,6 +23,7 @@ import { transcribe } from "./transcribe.js";
 import { analyzeTranscript } from "./analyze.js";
 import { renderShort } from "./edit.js";
 import { addSubtitles } from "./subtitles.js";
+import { alignScriptToTranscript } from "./align.js";
 import { pullARoll, pullAssets } from "./drive.js";
 import type { AssetIndex, ShortEdit, RunDirectory, WordTimestamp } from "./types.js";
 
@@ -236,6 +237,34 @@ async function cmdAnalyze(run: RunDirectory) {
   console.log(`\nNext: npm run edit [-- --short <id>]`);
 }
 
+async function cmdAlign(run: RunDirectory) {
+  await requireFile(run.transcriptPath, "npm run transcribe");
+
+  const scriptPath = path.join(run.root, "script.txt");
+  await requireFile(scriptPath, "upload with script");
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("Missing ANTHROPIC_API_KEY in .env");
+  }
+
+  const transcript = JSON.parse(await readFile(run.transcriptPath, "utf-8"));
+  const script = await readFile(scriptPath, "utf-8");
+
+  console.log(`[align] Aligning script (${script.length} chars) to transcript...`);
+  const { shorts, metadata } = await alignScriptToTranscript(script, transcript);
+
+  await writeFile(run.editsPath, JSON.stringify(shorts, null, 2));
+
+  console.log(`\n[align] Done. ${shorts.length} shorts identified:`);
+  for (const edit of shorts) {
+    const dur = edit.segmentsToKeep.reduce((s, seg) => s + (seg.end - seg.start), 0);
+    console.log(`  #${edit.id}: "${edit.title}" (~${Math.round(dur)}s)`);
+  }
+  console.log(`  ${metadata.scriptSections} script sections, ${metadata.totalTakes} total takes found, ${metadata.silenceRemoved.toFixed(1)}s silence removed`);
+  console.log(`  Saved: ${run.editsPath}`);
+  console.log(`\nNext: npm run edit [-- --short <id>]`);
+}
+
 async function cmdEdit(run: RunDirectory, shortId?: number) {
   await requireFile(run.editsPath, "npm run analyze");
   await requireFile(run.aRollPath, "npm run pull -- <source>");
@@ -379,7 +408,8 @@ function showHelp() {
 Commands:
   pull <drive-id|local-path>    Download a-roll from Drive (or copy local file) + sync assets
   transcribe                    Transcribe a-roll with whisper.cpp
-  analyze                       Send transcript to Claude for edit decisions
+  align                         Align pre-written script to transcript (best-take selection)
+  analyze                       Send transcript to Claude for edit decisions (legacy)
   edit [--short <id>]           Render shorts with FFmpeg (or just one)
   subtitles [--short <id>]      Add animated subtitles, copy to ~/Downloads
   run <drive-id|local-path>     Full pipeline end-to-end
@@ -428,6 +458,12 @@ async function main() {
     case "analyze": {
       const run = await resolveRunDir(runDirFlag);
       await cmdAnalyze(run);
+      break;
+    }
+
+    case "align": {
+      const run = await resolveRunDir(runDirFlag);
+      await cmdAlign(run);
       break;
     }
 

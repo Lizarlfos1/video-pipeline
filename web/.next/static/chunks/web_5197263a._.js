@@ -18,7 +18,9 @@ __turbopack_context__.s([
     "saveEdits",
     ()=>saveEdits,
     "triggerPipeline",
-    ()=>triggerPipeline
+    ()=>triggerPipeline,
+    "uploadVideo",
+    ()=>uploadVideo
 ]);
 const BASE = "/api";
 async function fetchJson(url, init) {
@@ -49,6 +51,20 @@ async function saveEdits(runId, shorts) {
         },
         body: JSON.stringify(shorts)
     });
+}
+async function uploadVideo(video, script) {
+    const formData = new FormData();
+    formData.append("video", video);
+    formData.append("script", script);
+    const res = await fetch("".concat(BASE, "/upload"), {
+        method: "POST",
+        body: formData
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error("Upload failed: ".concat(res.status, ": ").concat(text));
+    }
+    return res.json();
 }
 function mediaUrl(relativePath) {
     return "".concat(BASE, "/media?path=").concat(encodeURIComponent(relativePath));
@@ -197,6 +213,7 @@ const useEditorStore = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2
             pull: "idle",
             transcribe: "idle",
             analyze: "idle",
+            align: "idle",
             edit: "idle",
             subtitles: "idle"
         },
@@ -3438,6 +3455,7 @@ __turbopack_context__.s([
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/next/dist/compiled/react/index.js [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/next/navigation.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/lib/store.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$RunPicker$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/components/panels/RunPicker.tsx [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$ShortsList$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/components/panels/ShortsList.tsx [app-client] (ecmascript)");
@@ -3449,7 +3467,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$PropertiesPanel$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/components/panels/PropertiesPanel.tsx [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$SubtitleEditor$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/components/panels/SubtitleEditor.tsx [app-client] (ecmascript)");
 ;
-var _s = __turbopack_context__.k.signature();
+var _s = __turbopack_context__.k.signature(), _s1 = __turbopack_context__.k.signature();
 "use client";
 ;
 ;
@@ -3462,17 +3480,55 @@ var _s = __turbopack_context__.k.signature();
 ;
 ;
 ;
-function EditorPage() {
+;
+/** Reads query params and auto-loads a run if ?run=...&short=... are set */ function QueryParamLoader() {
     _s();
+    const searchParams = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useSearchParams"])();
+    const currentRunId = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"])({
+        "QueryParamLoader.useEditorStore[currentRunId]": (s)=>s.currentRunId
+    }["QueryParamLoader.useEditorStore[currentRunId]"]);
+    const loadRun = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"])({
+        "QueryParamLoader.useEditorStore[loadRun]": (s)=>s.loadRun
+    }["QueryParamLoader.useEditorStore[loadRun]"]);
+    const selectShort = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"])({
+        "QueryParamLoader.useEditorStore[selectShort]": (s)=>s.selectShort
+    }["QueryParamLoader.useEditorStore[selectShort]"]);
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "QueryParamLoader.useEffect": ()=>{
+            const runParam = searchParams.get("run");
+            const shortParam = searchParams.get("short");
+            if (runParam && runParam !== currentRunId) {
+                loadRun(runParam).then({
+                    "QueryParamLoader.useEffect": ()=>{
+                        if (shortParam) {
+                            selectShort(parseInt(shortParam, 10));
+                        }
+                    }
+                }["QueryParamLoader.useEffect"]);
+            }
+        }
+    }["QueryParamLoader.useEffect"], [
+        searchParams,
+        currentRunId,
+        loadRun,
+        selectShort
+    ]);
+    return null;
+}
+_s(QueryParamLoader, "P3x1dUNiOf1fYUzQYgQzGt7Qjjs=", false, function() {
+    return [
+        __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useSearchParams"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"]
+    ];
+});
+_c = QueryParamLoader;
+function EditorPage() {
+    _s1();
     const isDirty = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"])({
         "EditorPage.useEditorStore[isDirty]": (s)=>s.isDirty
     }["EditorPage.useEditorStore[isDirty]"]);
-    const currentRunId = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"])({
-        "EditorPage.useEditorStore[currentRunId]": (s)=>s.currentRunId
-    }["EditorPage.useEditorStore[currentRunId]"]);
-    const activeShortId = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"])({
-        "EditorPage.useEditorStore[activeShortId]": (s)=>s.activeShortId
-    }["EditorPage.useEditorStore[activeShortId]"]);
     // Warn on unsaved changes
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "EditorPage.useEffect": ()=>{
@@ -3497,6 +3553,18 @@ function EditorPage() {
             background: "var(--bg-primary)"
         },
         children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Suspense"], {
+                fallback: null,
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(QueryParamLoader, {}, void 0, false, {
+                    fileName: "[project]/web/app/editor/page.tsx",
+                    lineNumber: 58,
+                    columnNumber: 9
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/web/app/editor/page.tsx",
+                lineNumber: 57,
+                columnNumber: 7
+            }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("header", {
                 className: "flex items-center px-4 py-1.5 border-b flex-shrink-0",
                 style: {
@@ -3515,7 +3583,7 @@ function EditorPage() {
                                 children: "Video Pipeline"
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 45,
+                                lineNumber: 70,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3527,25 +3595,25 @@ function EditorPage() {
                                 children: "Editor"
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 51,
+                                lineNumber: 76,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/app/editor/page.tsx",
-                        lineNumber: 44,
+                        lineNumber: 69,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "flex-1 mx-4 max-w-md",
                         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$RunPicker$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                             fileName: "[project]/web/app/editor/page.tsx",
-                            lineNumber: 62,
+                            lineNumber: 87,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/web/app/editor/page.tsx",
-                        lineNumber: 61,
+                        lineNumber: 86,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3558,18 +3626,18 @@ function EditorPage() {
                             children: "Unsaved changes"
                         }, void 0, false, {
                             fileName: "[project]/web/app/editor/page.tsx",
-                            lineNumber: 66,
+                            lineNumber: 91,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/web/app/editor/page.tsx",
-                        lineNumber: 64,
+                        lineNumber: 89,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/web/app/editor/page.tsx",
-                lineNumber: 37,
+                lineNumber: 62,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3585,7 +3653,7 @@ function EditorPage() {
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$ShortsList$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 87,
+                                lineNumber: 112,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3595,18 +3663,18 @@ function EditorPage() {
                                 },
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$pipeline$2f$PipelineControls$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                     fileName: "[project]/web/app/editor/page.tsx",
-                                    lineNumber: 92,
+                                    lineNumber: 117,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 88,
+                                lineNumber: 113,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/app/editor/page.tsx",
-                        lineNumber: 79,
+                        lineNumber: 104,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
@@ -3616,17 +3684,17 @@ function EditorPage() {
                                 className: "flex-1 min-h-0",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$editor$2f$VideoPlayer$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                     fileName: "[project]/web/app/editor/page.tsx",
-                                    lineNumber: 100,
+                                    lineNumber: 125,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 99,
+                                lineNumber: 124,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$editor$2f$Toolbar$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 104,
+                                lineNumber: 129,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3637,23 +3705,23 @@ function EditorPage() {
                                 },
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$editor$2f$Timeline$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                     fileName: "[project]/web/app/editor/page.tsx",
-                                    lineNumber: 114,
+                                    lineNumber: 139,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 107,
+                                lineNumber: 132,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$SubtitleEditor$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 118,
+                                lineNumber: 143,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/app/editor/page.tsx",
-                        lineNumber: 97,
+                        lineNumber: 122,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("aside", {
@@ -3668,12 +3736,12 @@ function EditorPage() {
                                 className: "flex-1",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$AssetBrowser$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                     fileName: "[project]/web/app/editor/page.tsx",
-                                    lineNumber: 131,
+                                    lineNumber: 156,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 130,
+                                lineNumber: 155,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3683,43 +3751,42 @@ function EditorPage() {
                                 },
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$components$2f$panels$2f$PropertiesPanel$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                     fileName: "[project]/web/app/editor/page.tsx",
-                                    lineNumber: 137,
+                                    lineNumber: 162,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/web/app/editor/page.tsx",
-                                lineNumber: 133,
+                                lineNumber: 158,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/app/editor/page.tsx",
-                        lineNumber: 122,
+                        lineNumber: 147,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/web/app/editor/page.tsx",
-                lineNumber: 77,
+                lineNumber: 102,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/web/app/editor/page.tsx",
-        lineNumber: 32,
+        lineNumber: 53,
         columnNumber: 5
     }, this);
 }
-_s(EditorPage, "GmA5pT169XV7Ry1bEVHLFswW5DA=", false, function() {
+_s1(EditorPage, "tFa3HsWFF5ajwviZX4mPhWx+Hc0=", false, function() {
     return [
-        __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"],
-        __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"],
         __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$lib$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEditorStore"]
     ];
 });
-_c = EditorPage;
-var _c;
-__turbopack_context__.k.register(_c, "EditorPage");
+_c1 = EditorPage;
+var _c, _c1;
+__turbopack_context__.k.register(_c, "QueryParamLoader");
+__turbopack_context__.k.register(_c1, "EditorPage");
 if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
     __turbopack_context__.k.registerExports(__turbopack_context__.m, globalThis.$RefreshHelpers$);
 }

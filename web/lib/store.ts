@@ -124,6 +124,7 @@ export const useEditorStore = create<EditorState>()(
         pull: "idle",
         transcribe: "idle",
         analyze: "idle",
+        align: "idle",
         edit: "idle",
         subtitles: "idle",
       },

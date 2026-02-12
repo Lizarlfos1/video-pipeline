@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useEditorStore } from "@/lib/store";
 import RunPicker from "@/components/panels/RunPicker";
 import ShortsList from "@/components/panels/ShortsList";
@@ -12,10 +13,30 @@ import AssetBrowser from "@/components/panels/AssetBrowser";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import SubtitleEditor from "@/components/panels/SubtitleEditor";
 
+/** Reads query params and auto-loads a run if ?run=...&short=... are set */
+function QueryParamLoader() {
+  const searchParams = useSearchParams();
+  const currentRunId = useEditorStore((s) => s.currentRunId);
+  const loadRun = useEditorStore((s) => s.loadRun);
+  const selectShort = useEditorStore((s) => s.selectShort);
+
+  useEffect(() => {
+    const runParam = searchParams.get("run");
+    const shortParam = searchParams.get("short");
+    if (runParam && runParam !== currentRunId) {
+      loadRun(runParam).then(() => {
+        if (shortParam) {
+          selectShort(parseInt(shortParam, 10));
+        }
+      });
+    }
+  }, [searchParams, currentRunId, loadRun, selectShort]);
+
+  return null;
+}
+
 export default function EditorPage() {
   const isDirty = useEditorStore((s) => s.isDirty);
-  const currentRunId = useEditorStore((s) => s.currentRunId);
-  const activeShortId = useEditorStore((s) => s.activeShortId);
 
   // Warn on unsaved changes
   useEffect(() => {
@@ -33,6 +54,10 @@ export default function EditorPage() {
       className="h-screen flex flex-col overflow-hidden"
       style={{ background: "var(--bg-primary)" }}
     >
+      <Suspense fallback={null}>
+        <QueryParamLoader />
+      </Suspense>
+
       {/* Top bar */}
       <header
         className="flex items-center px-4 py-1.5 border-b flex-shrink-0"

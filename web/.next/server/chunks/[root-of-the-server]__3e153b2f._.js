@@ -175,6 +175,7 @@ const VALID_STAGES = new Set([
     "pull",
     "transcribe",
     "analyze",
+    "align",
     "edit",
     "subtitles"
 ]);
