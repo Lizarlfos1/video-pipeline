@@ -1,0 +1,11 @@
+{
+  "/api/media/route": "app/api/media/route.js",
+  "/api/pipeline/[stage]/route": "app/api/pipeline/[stage]/route.js",
+  "/api/pipeline/[stage]/stream/route": "app/api/pipeline/[stage]/stream/route.js",
+  "/api/runs/[runId]/assets/route": "app/api/runs/[runId]/assets/route.js",
+  "/api/runs/[runId]/edits/route": "app/api/runs/[runId]/edits/route.js",
+  "/api/runs/[runId]/transcript/route": "app/api/runs/[runId]/transcript/route.js",
+  "/api/runs/route": "app/api/runs/route.js",
+  "/editor/page": "app/editor/page.js",
+  "/page": "app/page.js"
+}

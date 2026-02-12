@@ -11,7 +11,7 @@ import type { Transcript, TranscriptSegment, WordTimestamp } from "./types.js";
 
 const exec = promisify(execFile);
 
-const WHISPER_BIN = path.join(process.env.HOME ?? "~", "whisper.cpp", "main");
+const WHISPER_BIN = path.join(process.env.HOME ?? "~", "whisper.cpp", "build", "bin", "whisper-cli");
 const WHISPER_MODEL = path.join(
   process.env.HOME ?? "~",
   "whisper.cpp",
@@ -19,17 +19,50 @@ const WHISPER_MODEL = path.join(
   "ggml-large-v3.bin"
 );
 
-interface WhisperWord {
-  word: string;
-  start: number;
-  end: number;
+/** Token from whisper.cpp JSON full output */
+interface WhisperToken {
+  text: string;
+  offsets: { from: number; to: number };
+  id: number;
+  p: number;
 }
 
+/** Segment from whisper.cpp JSON output */
 interface WhisperSegment {
   text: string;
-  start: number;
-  end: number;
-  words: WhisperWord[];
+  offsets: { from: number; to: number };
+  tokens: WhisperToken[];
+}
+
+/**
+ * Merge sub-word tokens into full words with timestamps.
+ * Tokens starting with a space begin a new word, others continue the previous.
+ */
+function tokensToWords(tokens: WhisperToken[]): WordTimestamp[] {
+  const words: WordTimestamp[] = [];
+  // Filter out special tokens like [_BEG_], [_TT_...], etc.
+  const realTokens = tokens.filter((t) => !t.text.startsWith("["));
+
+  for (const token of realTokens) {
+    const isNewWord = token.text.startsWith(" ") || words.length === 0;
+    const text = token.text.trimStart();
+    if (!text) continue;
+
+    if (isNewWord) {
+      words.push({
+        word: text,
+        start: token.offsets.from / 1000,
+        end: token.offsets.to / 1000,
+      });
+    } else if (words.length > 0) {
+      // Continue previous word
+      const last = words[words.length - 1];
+      last.word += text;
+      last.end = token.offsets.to / 1000;
+    }
+  }
+
+  return words;
 }
 
 /**
@@ -69,7 +102,7 @@ export async function transcribe(
       "--output-json-full",
       "--output-file", outputBase,
       "--print-progress",
-      "--threads", "8",   // M2 has 8 cores
+      "--threads", "8",
     ],
     { maxBuffer: 50 * 1024 * 1024, timeout: 60 * 60 * 1000 } // 1 hour timeout
   );
@@ -81,13 +114,9 @@ export async function transcribe(
   const segments: TranscriptSegment[] = raw.transcription.map(
     (seg: WhisperSegment) => ({
       text: seg.text.trim(),
-      start: seg.start / 1000, // whisper.cpp outputs ms
-      end: seg.end / 1000,
-      words: (seg.words ?? []).map((w: WhisperWord) => ({
-        word: w.word.trim(),
-        start: w.start / 1000,
-        end: w.end / 1000,
-      })),
+      start: seg.offsets.from / 1000,
+      end: seg.offsets.to / 1000,
+      words: tokensToWords(seg.tokens),
     })
   );
 

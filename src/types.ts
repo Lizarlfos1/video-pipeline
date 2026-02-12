@@ -56,13 +56,15 @@ export interface ShortEdit {
   subtitleWords: WordTimestamp[]; // for Remotion captions
 }
 
-export interface PipelineConfig {
+export interface RunDirectory {
+  root: string;
   aRollPath: string;
-  bRollDir: string;
-  graphsDir: string;
-  sfxDir: string;
-  outputDir: string;
-  driveCompletedFolderId: string;
+  assetsJsonPath: string;
+  transcriptPath: string;
+  editsPath: string;
+  shortsDir: string;
+  finalsDir: string;
+  tmpDir: string;
 }
 
 export interface AssetIndex {

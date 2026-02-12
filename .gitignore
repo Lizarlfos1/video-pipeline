@@ -8,3 +8,5 @@ credentials/
 *.mp3
 tmp/
 output/
+runs/
+assets/

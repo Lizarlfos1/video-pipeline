@@ -1,10 +1,13 @@
 /**
- * Google Drive module - pulls assets and uploads completed shorts
+ * Google Drive module - pulls a-roll and syncs assets
  */
 
 import { google } from "googleapis";
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { readFile, mkdir, stat } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import type { AssetIndex } from "./types.js";
 
 const CREDENTIALS_PATH = path.join(
@@ -55,7 +58,7 @@ async function listFolder(
 }
 
 /**
- * Download a file from Google Drive to local path
+ * Download a file from Google Drive to local path (streaming for large files)
  */
 async function downloadFile(
   fileId: string,
@@ -64,10 +67,11 @@ async function downloadFile(
   const drive = await getDrive();
   const res = await drive.files.get(
     { fileId, alt: "media" },
-    { responseType: "arraybuffer" }
+    { responseType: "stream" }
   );
 
-  await writeFile(destPath, Buffer.from(res.data as ArrayBuffer));
+  const dest = createWriteStream(destPath);
+  await pipeline(res.data as Readable, dest);
 }
 
 /**
@@ -105,17 +109,26 @@ export async function pullAssets(
     }
   }
 
-  // B-roll
+  // B-roll (supports subfolders — folder name becomes label, first file inside is used)
+  const isFolder = (mimeType: string) => mimeType === "application/vnd.google-apps.folder";
   const brollFiles = await listFolder(bRollFolderId);
   for (const f of brollFiles) {
-    if (!isDownloadable(f.mimeType)) {
-      console.log(`  [drive] Skipping non-binary file: ${f.name} (${f.mimeType})`);
-      continue;
+    if (isFolder(f.mimeType)) {
+      // Recurse into subfolder — use folder name as label, download first video
+      const subFiles = await listFolder(f.id);
+      const firstVideo = subFiles.find((sf) => isDownloadable(sf.mimeType));
+      if (!firstVideo) continue;
+      const subDir = path.join(brollDir, f.name);
+      await mkdir(subDir, { recursive: true });
+      const localPath = path.join(subDir, firstVideo.name);
+      await downloadIfNew(firstVideo.id, localPath, `B-roll: ${f.name}`);
+      index.broll.push({ label: f.name, path: localPath });
+    } else if (isDownloadable(f.mimeType)) {
+      const localPath = path.join(brollDir, f.name);
+      const label = path.parse(f.name).name;
+      await downloadIfNew(f.id, localPath, `B-roll: ${label}`);
+      index.broll.push({ label, path: localPath });
     }
-    const localPath = path.join(brollDir, f.name);
-    const label = path.parse(f.name).name;
-    await downloadIfNew(f.id, localPath, `B-roll: ${label}`);
-    index.broll.push({ label, path: localPath });
   }
 
   // Graphs
@@ -167,32 +180,4 @@ export async function pullARoll(
   console.log(`[drive] A-roll saved to ${localPath}`);
 
   return localPath;
-}
-
-/**
- * Upload a completed short back to Google Drive
- */
-export async function uploadCompleted(
-  localPath: string,
-  completedFolderId: string
-): Promise<string> {
-  const drive = await getDrive();
-  const fileName = path.basename(localPath);
-
-  console.log(`[drive] Uploading ${fileName} to completed folder...`);
-
-  const res = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [completedFolderId],
-    },
-    media: {
-      mimeType: "video/mp4",
-      body: (await import("node:fs")).createReadStream(localPath),
-    },
-    fields: "id, webViewLink",
-  });
-
-  console.log(`[drive] Uploaded: ${res.data.webViewLink}`);
-  return res.data.webViewLink ?? res.data.id ?? "";
 }

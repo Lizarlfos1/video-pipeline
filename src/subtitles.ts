@@ -44,7 +44,7 @@ export async function addSubtitles(
   outputPath: string,
   tmpDir: string
 ): Promise<string> {
-  console.log(`[subtitles] Rendering animated captions for ${path.basename(videoPath)}...`);
+  console.log(`[subtitles] Rendering animated captions for ${path.basename(videoPath)} (${words.length} words)...`);
 
   const propsPath = path.join(tmpDir, "subtitle-props.json");
   await writeSubtitleProps(words, durationInSeconds, propsPath);
@@ -53,6 +53,7 @@ export async function addSubtitles(
   const remotionDir = path.join(process.cwd(), "remotion");
 
   // Render subtitle overlay with transparent background
+  // --pixel-format yuva420p is critical for VP9 alpha channel
   await exec(
     "npx",
     [
@@ -62,8 +63,9 @@ export async function addSubtitles(
       "Subtitles",
       subtitleVideoPath,
       "--props", propsPath,
-      "--codec", "vp9",       // supports transparency
-      "--image-format", "png", // for alpha channel
+      "--codec", "vp9",
+      "--image-format", "png",
+      "--pixel-format", "yuva420p",
       "--concurrency", "4",
     ],
     { maxBuffer: 50 * 1024 * 1024, timeout: 30 * 60 * 1000, cwd: remotionDir }
@@ -75,6 +77,7 @@ export async function addSubtitles(
     "ffmpeg",
     [
       "-i", videoPath,
+      "-c:v", "libvpx-vp9",
       "-i", subtitleVideoPath,
       "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1",
       "-c:v", "h264_videotoolbox",

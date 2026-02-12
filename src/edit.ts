@@ -96,8 +96,8 @@ function buildFilterComplex(edit: ShortEdit): {
     `${concatInputs}concat=n=${segments.length}:v=1:a=1[vconcat][aconcat]`
   );
 
-  // Step 3: Scale to target size
-  filters.push(`[vconcat]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2[vscaled]`);
+  // Step 3: Scale and crop to portrait (9:16) — crop-to-fill, not letterbox
+  filters.push(`[vconcat]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vscaled]`);
 
   // Step 4: Apply zoom on emphasis words using crop+overlay (not zoompan)
   // Build zoom enable condition for all emphasis words
@@ -215,14 +215,20 @@ export async function renderShort(
     }
 
     const overlayStart = mapToConcatTime(overlay.startAt, edit.segmentsToKeep);
-    if (overlayStart === null) continue;
+    if (overlayStart === null) {
+      console.log(`  [edit] Skipping overlay "${overlay.matchLabel}" - timestamp ${overlay.startAt}s outside kept segments`);
+      continue;
+    }
+
+    const overlayEnd = overlayStart + overlay.duration;
+    console.log(`  [edit] Overlay ${overlay.type} "${overlay.matchLabel}" at ${overlayStart.toFixed(1)}-${overlayEnd.toFixed(1)}s`);
 
     const overlayOutput = path.join(tmpDir, `overlay_${edit.id}_${i}.mp4`);
 
     const overlayFilter =
       overlay.type === "graph"
-        ? `[1:v]scale=800:-1,format=rgba,fade=in:st=0:d=0.3:alpha=1,fade=out:st=${overlay.duration - 0.3}:d=0.3:alpha=1[ovr];[0:v][ovr]overlay=(W-w)/2:(H-h)/2:enable='between(t,${overlayStart},${overlayStart + overlay.duration})'`
-        : `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=PTS-STARTPTS[ovr];[0:v][ovr]overlay=0:0:enable='between(t,${overlayStart},${overlayStart + overlay.duration})'`;
+        ? `[1:v]scale=800:-1,format=rgba,fade=in:st=0:d=0.3:alpha=1,fade=out:st=${overlay.duration - 0.3}:d=0.3:alpha=1[ovr];[0:v][ovr]overlay=(W-w)/2:(H-h)/2:shortest=1:enable='between(t\\,${overlayStart.toFixed(3)}\\,${overlayEnd.toFixed(3)})'`
+        : `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=PTS-STARTPTS[ovr];[0:v][ovr]overlay=0:0:shortest=1:enable='between(t\\,${overlayStart.toFixed(3)}\\,${overlayEnd.toFixed(3)})'`;
 
     await ffmpeg([
       "-i", currentPath,
